@@ -13,7 +13,7 @@ class SegThroughMeanExt:
         ), "The shape of the input array is not correct. It should be (n, 2)"
 
         self.data = data
-        self.mean_point = (np.mean(data[:, 0]), np.mean(data[:, 1]))
+        self.mean_point = np.mean(data, axis=0)
 
     def get_consecutive_segments(self) -> List[Tuple[float, float]]:
         """
@@ -210,14 +210,11 @@ class SegThroughMeanExt:
         else:
             points_to_use = self.data
 
-        # save the mean point
-        mean_point = (np.mean(points_to_use[:, 0]), np.mean(points_to_use[:, 1]))
-
         # for each point on the border, get the segment that passes through the mean point and ends on another point on the border
         segments_through_mean = []
         for point in points_to_use:
             segments_through_mean.append(
-                self.get_segment_through_mean(point, mean_point, consecutive_segments)
+                self.get_segment_through_mean(point, self.mean_point, consecutive_segments)
             )
 
         # remove duplicates since sometimes the founds segments have the same points
