@@ -3,7 +3,7 @@
 This is a simple method that, given a list of 2d points that constitutes the border of a shape, finds all the segments that start from the points on the border, pass through the mean of the points, and end on the border again. Then it finds the longest segment among them.
 
 ## :snake: How to use 
-First you need to have (or create) an environment using the `requirements.txt` file.
+First you need to have (or create) an environment using the `requirements.txt` file (this will allow you to use the `extractor_class.py`, however to run the `example.ipynb` you are going to need the `plotly` library). 
 To use the code, simply clone the repo and use the code contained in the `extractor_class.py` file, as shown in `example.ipynb`. 
 
 The code is really simple, don't get discouraged by the length of the code on the notebook, most of it belongs to the plotting part!
