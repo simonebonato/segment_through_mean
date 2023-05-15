@@ -3,19 +3,13 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import pairwise_distances
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 
 class SegThroughMeanExt:
-    def __init__(self, data: np.ndarray):
-        assert (
-            data.shape[1] == 2 and len(data.shape) == 2
-        ), "The shape of the input array is not correct. It should be (n, 2)"
-
-        self.data = data
-        self.mean_point = np.mean(data, axis=0)
-
-    def get_consecutive_segments(self) -> List[Tuple[float, float]]:
+    def get_consecutive_segments(
+        self, border_points: np.ndarray
+    ) -> List[Tuple[float, float]]:
         """
         Method that takes in a list of 2D points representing the border of a shape and returns the list of consecutive segments.
 
@@ -24,7 +18,7 @@ class SegThroughMeanExt:
         """
 
         # create a df with the pairwise distances between the points
-        distances_df = pd.DataFrame(pairwise_distances(self.data))
+        distances_df = pd.DataFrame(pairwise_distances(border_points))
 
         # for each point, get the two closest points (excluding the point itself)
         # they will be the two points that form the segment of the contour
@@ -32,11 +26,13 @@ class SegThroughMeanExt:
         for point_idx in distances_df.index:
             ordered_row_index = distances_df.loc[point_idx].sort_values(ascending=True)
 
-            origin_point = self.data[point_idx]
-            first_neighbour = self.data[ordered_row_index.index[1]]
+            origin_point = border_points[point_idx]
+            first_neighbour = border_points[ordered_row_index.index[1]]
 
             second_neighbor_idx = 2
-            second_neighbour = self.data[ordered_row_index.index[second_neighbor_idx]]
+            second_neighbour = border_points[
+                ordered_row_index.index[second_neighbor_idx]
+            ]
 
             consecutive_segments.append((origin_point, first_neighbour))
 
@@ -55,7 +51,7 @@ class SegThroughMeanExt:
                 second_neighbor_idx += 1
                 if second_neighbor_idx == len(ordered_row_index):
                     break
-                second_neighbour = self.data[
+                second_neighbour = border_points[
                     ordered_row_index.index[second_neighbor_idx]
                 ]
 
@@ -99,9 +95,9 @@ class SegThroughMeanExt:
             return lambda x, y: m_perp * x + q_perp - y
 
     @staticmethod
-    def get_segment_through_mean(
+    def get_segment_through_a_point(
         starting_point: Tuple[float, float],
-        mean_point: Tuple[float, float],
+        point_through: Tuple[float, float],
         consecutive_segments: List[Tuple[float, float]],
     ) -> List[Tuple[float, float]]:
         """
@@ -118,8 +114,10 @@ class SegThroughMeanExt:
         :return: the list of points that form the segment
         """
         # line that passes through the first point and the mean point
-        m = (mean_point[1] - starting_point[1]) / (mean_point[0] - starting_point[0])
-        b = mean_point[1] - m * mean_point[0]
+        m = (point_through[1] - starting_point[1]) / (
+            point_through[0] - starting_point[0]
+        )
+        b = point_through[1] - m * point_through[0]
 
         intersection_points = [(starting_point[0], starting_point[1])]
 
@@ -187,34 +185,32 @@ class SegThroughMeanExt:
 
         return points_to_keep
 
-    def get_all_segments_through_mean(
+    def get_all_segments_through_point(
         self,
-        optional_points: Optional[np.ndarray] = None,
+        border_points: List[Tuple[float, float]],
+        through_point: Tuple[float, float],
+        consecutive_segments: List[Tuple[float, float]],
     ) -> List[List[Tuple[float, float]]]:
         """
         Method that takes in a list of 2D points representing the border of a shape and returns the list of segments that start from a point on the border,
-        pass through the mean point and end on another point on the border. Each segment is defined by the points at the extremes.
+        pass through the through point and end on another point on the border. Each segment is defined by the points at the extremes.
 
         Parameters
-        :param optional_points: the list of points that make the border of the shape, if you don't want to use the points that were used to create the object
+        :param border_points: the list of points that make the border of the shape
+        :param through_point: the point through which the segments must pass
+        :param consecutive_segments: the list of consecutive segments that make the border of the shape
 
         Returns
-        :return: the list of segments that pass through the mean point
+        :return: the list of segments that pass through the through point
         """
-
-        # get all the consecutive segments of the border
-        consecutive_segments = self.get_consecutive_segments()
-
-        if optional_points is not None:
-            points_to_use = optional_points
-        else:
-            points_to_use = self.data
 
         # for each point on the border, get the segment that passes through the mean point and ends on another point on the border
         segments_through_mean = []
-        for point in points_to_use:
+        for point in border_points:
             segments_through_mean.append(
-                self.get_segment_through_mean(point, self.mean_point, consecutive_segments)
+                self.get_segment_through_a_point(
+                    point, through_point, consecutive_segments
+                )
             )
 
         # remove duplicates since sometimes the founds segments have the same points
@@ -232,11 +228,13 @@ class SegThroughMeanExt:
         return segments_through_mean
 
     @staticmethod
-    def get_max_segment(
-        segments: List[List[Tuple[float, float]]]
-    ) -> Tuple[List[Tuple[float, float]], float]:
+    def find_max_min_segment(
+        segments: List[List[Tuple[float, float]]],
+        mean_and_median: bool = False,
+    ):
         """
         Method that takes in a list of segments and returns the longest one and its length.
+        It can also return the mean and median length of the segments.
 
         Parameters
         :param segments: the list of segments
@@ -249,6 +247,12 @@ class SegThroughMeanExt:
         max_length = 0.0
         max_segment = None
 
+        # set min length to the maximum float value and min segment to None
+        min_length = np.inf
+        min_segment = None
+
+        segments_lengths_list = []
+
         # for each segment, calculate its length and check if it is the longest
         for segment in segments:
             dist = np.linalg.norm(np.array(segment[0]) - np.array(segment[1]))
@@ -257,10 +261,25 @@ class SegThroughMeanExt:
                 max_length = dist
                 max_segment = segment
 
-        return (max_segment, max_length)
+            if dist < min_length:
+                min_length = dist
+                min_segment = segment
+
+            segments_lengths_list.append(dist)
+
+        if mean_and_median:
+            return (
+                (max_segment, max_length),
+                (min_segment, min_length),
+                (np.mean(segments_lengths_list), np.median(segments_lengths_list)),
+            )
+        else:
+            return ((max_segment, max_length), (min_segment, min_length))
 
     def add_intermediate_points(
-        self, times: int = 2, optional_points: Optional[np.ndarray] = None
+        self,
+        points: np.ndarray,
+        times: int = 2,
     ) -> np.ndarray:
         """
         Method that takes in a list of 2D points representing the border of a shape
@@ -274,18 +293,14 @@ class SegThroughMeanExt:
         Returns
         :return: the list of points, plus the midpoints of the segments that connect them
         """
-        if optional_points is not None:
-            points_to_use = optional_points
-        else:
-            points_to_use = self.data.copy()
-
+        points_copy = points.copy()
         for _ in range(times):
-            consecutive_segments = self.get_consecutive_segments()
+            consecutive_segments = self.get_consecutive_segments(points_copy)
 
             for segment in consecutive_segments:
                 # compute the midpoint of the segment
                 midpoint = (segment[0] + segment[1]) / 2
                 # add the midpoint to the list of points
-                points_to_use = np.vstack((points_to_use, midpoint))
+                points_copy = np.vstack((points_copy, midpoint))
 
-        return points_to_use
+        return points_copy
